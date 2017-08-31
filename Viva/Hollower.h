@@ -53,7 +53,9 @@ public:
 	HANDLE DoHollow();
 	~Hollower();
 private:
-	
+	PEData *peData;
+	void* loadedExeSection=NULL;
+	void* remoteBase=NULL;
 	std::wstring path;
 	HANDLE hProc;
 	TNtUnmapViewOfSection NtUnmapViewOfSection;
@@ -62,6 +64,7 @@ private:
 	std::vector<PEData *> sections;
 	//Applies memory remapping with unpacked sections
 	void ReMapExe();
+	void RebuildIAT();
 	//Extract unpacked PE data to assist in mapping and IAT rebuilding
 	void ExtractPEData(IMAGE_DOS_HEADER *exe);
 	void CreateSuspendedProcess();

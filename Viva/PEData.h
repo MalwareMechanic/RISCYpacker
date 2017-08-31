@@ -9,9 +9,14 @@ struct SectionInfo {
 	int _rOffset, _vOffset, _rSize, _vSize;
 };
 
+struct Thunk {
+	std::string libname;
+	std::vector<std::string> functionNames;
+};
+
 struct IAT {
 	unsigned int offset;
-	std::map<std::wstring, std::vector<std::wstring>> functions;
+	std::vector<Thunk> thunks;
 };
 
 
@@ -21,9 +26,12 @@ public:
 	PEData(IMAGE_DOS_HEADER* exe);
 	IAT GetIAT() { return iat; }
 	std::vector<SectionInfo> GetSections() { return si; }
+	IMAGE_OPTIONAL_HEADER *GetOptionalHeader() { return this->I_optionalHeader; }
+	void *GetModuleBase() { return exe; }
 	~PEData();
 private:
 	IMAGE_OPTIONAL_HEADER *I_optionalHeader;
+
 	IMAGE_NT_HEADERS *I_ntHeader;
 	IMAGE_FILE_HEADER *I_fileHeader;
 	IMAGE_DATA_DIRECTORY *I_dataDirectory;

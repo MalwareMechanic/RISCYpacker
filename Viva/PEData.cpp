@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "PEData.h"
+#include <algorithm>
 
 
 PEData::PEData(IMAGE_DOS_HEADER *exe)
@@ -42,13 +43,44 @@ void PEData::ExtractSections()
 
 }
 
+//sort function ordering by OFT
+bool sortOFT(IMAGE_IMPORT_DESCRIPTOR* a, IMAGE_IMPORT_DESCRIPTOR* b)
+{
+	if (a->OriginalFirstThunk > b->OriginalFirstThunk)
+		return false;
+}
+
 void PEData::ExtractImports()
 {
 
-	IMAGE_IMPORT_DESCRIPTOR *imports = (IMAGE_IMPORT_DESCRIPTOR*)((DWORD)exe+Rva2Offset(this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress));
-	IMAGE_THUNK_DATA *thunk = (IMAGE_THUNK_DATA*) ((int)exe + imports->OriginalFirstThunk);
+	IMAGE_IMPORT_DESCRIPTOR *imports = (IMAGE_IMPORT_DESCRIPTOR*)((DWORD)exe + Rva2Offset(this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress));
+	
+	std::vector<IMAGE_IMPORT_DESCRIPTOR*> thunkList;
+	//Do not convert to raw address, we need loaded location
+	this->iat.offset = this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress;
+	int importSize = (this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)/sizeof(IMAGE_IMPORT_DESCRIPTOR);
+	//build in order import (needed for IAT)
+	for(int i =0;i<importSize-1;i++)
+	{
+		thunkList.push_back(imports);
+		imports++;
+	}
 
-	thunk->u1.AddressOfData;
+	std::sort(thunkList.begin(), thunkList.end(),sortOFT);
+	
+	for (std::vector<IMAGE_IMPORT_DESCRIPTOR*>::iterator it = thunkList.begin(); it != thunkList.end(); ++it)
+	{
+		Thunk t;
+		t.libname = std::string((char*)((DWORD)exe + Rva2Offset((*it)->Name)));
+
+		IMAGE_THUNK_DATA* thunk = (IMAGE_THUNK_DATA*)((int)exe + Rva2Offset((*it)->OriginalFirstThunk));
+		while (*(DWORD*)thunk != NULL) {
+			
+			t.functionNames.push_back((char*)((int)exe + Rva2Offset(thunk->u1.Function+2)));
+			thunk++;
+		}
+	}
+
 }
 
 PEData::~PEData()
