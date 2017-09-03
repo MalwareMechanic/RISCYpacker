@@ -24,6 +24,8 @@ class PEData
 {
 public:
 	PEData(IMAGE_DOS_HEADER* exe);
+	PEData(std::wstring filePath);
+	void Init(IMAGE_DOS_HEADER* exe);
 	IAT GetIAT() { return iat; }
 	std::vector<SectionInfo> GetSections() { return si; }
 	IMAGE_OPTIONAL_HEADER *GetOptionalHeader() { return this->I_optionalHeader; }
@@ -32,7 +34,6 @@ public:
 	~PEData();
 private:
 	IMAGE_OPTIONAL_HEADER *I_optionalHeader;
-
 	IMAGE_NT_HEADERS *I_ntHeader;
 	IMAGE_FILE_HEADER *I_fileHeader;
 	IMAGE_DATA_DIRECTORY *I_dataDirectory;

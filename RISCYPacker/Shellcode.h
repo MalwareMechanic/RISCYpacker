@@ -28,12 +28,11 @@ bool ContainsString(char* src, char* str, bool isUnicode)
 	return false;
 }
 
-void endContainsStringStub() {}
-
 void IATshellcode()
 {
 	_PEB *PEB;
 	__asm {
+		pushad
 		push edi;
 		push fs : [0x30];
 		pop edi;
@@ -81,11 +80,11 @@ void IATshellcode()
 
 		if (TContainsString((char*)((int)kernel32Base + *functionsNames), getprocaddressStr, false))
 		{
-			getProcAddderIndex = funcIndex+2;
+			getProcAddderIndex = funcIndex + 2;
 		}
 		if (TContainsString((char*)((int)kernel32Base + *functionsNames), loadlibraryStr, false))
 		{
-			loadLibraryIndex = funcIndex+1;
+			loadLibraryIndex = funcIndex + 1;
 			break;
 		}
 		functionsNames++;
@@ -101,44 +100,45 @@ void IATshellcode()
 	char* currLib = (char*)serializedIATinfo;
 	char* currFunc;
 	DWORD libBase;
+	//start -1 for loops sake
+	iatLocation--;
 	//while not end of IAT info (null.null.null)
-	while ((BYTE*)serializedIATinfo[i] != NULL && (BYTE*)serializedIATinfo[i+1] != NULL && (BYTE*)serializedIATinfo[i+2] != NULL)
+	while (((char*)serializedIATinfo)[i] != NULL || ((char*)serializedIATinfo)[i + 1] != NULL || ((char*)serializedIATinfo)[i + 2] != NULL)
 	{
-		//Library end
-		if ((BYTE*)serializedIATinfo[i]!=NULL && (BYTE*)serializedIATinfo[i+1] != NULL)
+		//Library end (null.null)
+		if (((char*)serializedIATinfo)[i] == NULL && ((char*)serializedIATinfo)[i + 1] == NULL)
 		{
 			i += 2;
-			currLib = (char*)serializedIATinfo+i;
-			int j = i;
+			currLib = (char*)(((char*)serializedIATinfo) + i);
+			
 			//eat up library string
-			while (serializedIATinfo[j] != NULL)
+			while (((char*)serializedIATinfo)[i] != NULL)
 			{
-				j++;
+				i++;
 			}
-			i = j + 1;
+			i++;
 			libBase = TLoadLibrary(currLib);
 
 			*iatLocation = 0x00000000;
 			iatLocation++;
 		}
-		currFunc = (char*)serializedIATinfo+i;
-		int j = i;
+		currFunc = (char*)(((char*)serializedIATinfo) + i);
 		//eat up function string
-		while (serializedIATinfo[j] != NULL)
+		while (((char*)serializedIATinfo)[i] != NULL)
 		{
-			j++;
+			i++;
 		}
-		i = j + 1;
+		i++;
 
 		*iatLocation = (DWORD)TGetProcAddress(libBase, currFunc);
 		iatLocation++;
 	}
 
 	__asm {
+		popad
 		jmp oep;
 	}
 }
 
 /**********************************</No CRT/Windows API allowed>**************************************/
 
-void endIATshellcodeStub() {}

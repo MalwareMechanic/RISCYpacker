@@ -27,9 +27,6 @@
     <ClInclude Include="Resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Viva.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Hollower.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -39,15 +36,18 @@
     <ClInclude Include="PEData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RISCYPacker.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Shellcode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Reflections.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Viva.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Hollower.cpp">
@@ -59,9 +59,12 @@
     <ClCompile Include="PEData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RISCYPacker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Viva.rc">
+    <ResourceCompile Include="RISCYPacker.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
@@ -69,13 +72,13 @@
     <Image Include="small.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="Viva.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="icon1.ico">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="icon2.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="RISCYPacker.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

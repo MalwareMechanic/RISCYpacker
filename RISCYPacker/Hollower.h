@@ -61,13 +61,15 @@ public:
 	HANDLE DoHollow();
 	~Hollower();
 private:
-	PEData *peData;
+	PEData *packedPEData,*hollowedPEData;
 	void *imageOffset;
-	void* loadedExeSection = NULL;
+	void* localSectionBase = NULL;
 	void* remoteBase = NULL;
+	void WriteIATInfo(size_t IATInfoOffset);
+	void FixRelocations();
 	size_t containsStringSize=0;
 	size_t IATshellcodeSize=0;
-	std::wstring path;
+	std::wstring hollowedProcPath;
 	HANDLE hProc;
 	TNtUnmapViewOfSection NtUnmapViewOfSection;
 	TNtMapViewOfSection NtMapViewOfSection;
@@ -77,7 +79,7 @@ private:
 	/*************HOLLOW ROUTINES***************/
 	void ReMapExe();
 	size_t SerializeIATInfo();
-	void WriteIATStub(size_t offset);
+	void InjectBootstrapCode(size_t offset);
 	void CreateSuspendedProcess();
 
 };

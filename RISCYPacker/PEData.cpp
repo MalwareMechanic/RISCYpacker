@@ -5,13 +5,31 @@
 
 PEData::PEData(IMAGE_DOS_HEADER *exe)
 {
+	Init(exe);
+}
+
+PEData::PEData(std::wstring filePath)
+{
+	HANDLE hPE = CreateFile(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, 0, 0);
+	if (hPE == NULL)
+		exit(-1);
+	LARGE_INTEGER fileSize = { 0,0 };
+	GetFileSizeEx(hPE, &fileSize);
+	IMAGE_DOS_HEADER *hollowedImage = (IMAGE_DOS_HEADER*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, fileSize.LowPart);
+	ReadFile(hPE, (void*)hollowedImage, fileSize.LowPart, NULL, NULL);
+	CloseHandle(hPE);
+
+	Init(hollowedImage);
+}
+
+void PEData::Init(IMAGE_DOS_HEADER *exe)
+{
 	this->exe = (void*)exe;
 	this->I_ntHeader = (IMAGE_NT_HEADERS*)((int)exe + ((IMAGE_DOS_HEADER*)exe)->e_lfanew);
 	this->I_fileHeader = (IMAGE_FILE_HEADER*)&I_ntHeader->FileHeader;
 	this->I_optionalHeader = (IMAGE_OPTIONAL_HEADER*)&this->I_ntHeader->OptionalHeader;
 	ExtractSections();
 	ExtractImports();
-
 }
 
 DWORD PEData::Rva2Offset(DWORD dwRva)
@@ -47,6 +65,7 @@ bool sortOFT(IMAGE_IMPORT_DESCRIPTOR* a, IMAGE_IMPORT_DESCRIPTOR* b)
 {
 	if (a->OriginalFirstThunk > b->OriginalFirstThunk)
 		return false;
+	return true;
 }
 
 void PEData::ExtractImports()

