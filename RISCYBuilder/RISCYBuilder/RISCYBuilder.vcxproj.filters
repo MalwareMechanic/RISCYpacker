@@ -30,6 +30,12 @@
     <ClInclude Include="Output.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ExeModder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PEData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -39,6 +45,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Packer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ExeModder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PEData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

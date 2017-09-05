@@ -143,13 +143,17 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ExeModder.h" />
     <ClInclude Include="Output.h" />
     <ClInclude Include="Packer.h" />
+    <ClInclude Include="PEData.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ExeModder.cpp" />
     <ClCompile Include="Packer.cpp" />
+    <ClCompile Include="PEData.cpp" />
     <ClCompile Include="RISCYBuilder.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

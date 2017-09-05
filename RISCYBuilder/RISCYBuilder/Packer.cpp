@@ -59,6 +59,6 @@ BYTE* Packer::Pack(IMAGE_DOS_HEADER *exe,size_t fSize)
 {
 	
 	this->packedBinary = ZLIBcompress(exe, fSize);
-	Crypt();
+	//Crypt();
 	return (BYTE*)this->packedBinary.data();
 }
