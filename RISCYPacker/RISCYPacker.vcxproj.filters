@@ -45,6 +45,12 @@
     <ClInclude Include="Reflections.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="StringCryptor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AVStringTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">

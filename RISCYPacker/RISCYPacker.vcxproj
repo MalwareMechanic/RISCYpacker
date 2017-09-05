@@ -90,9 +90,11 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <BasicRuntimeChecks />
+      <AdditionalIncludeDirectories>C:\Users\capta\Desktop\boost_1_64_0\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>C:\Users\capta\Desktop\boost_1_64_0\stage\win32\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -143,12 +145,14 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AVStringTable.h" />
     <ClInclude Include="Reflections.h" />
     <ClInclude Include="Shellcode.h" />
     <ClInclude Include="Hollower.h" />
     <ClInclude Include="PEData.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="StringCryptor.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Unpacker.h" />
     <ClInclude Include="RISCYPacker.h" />

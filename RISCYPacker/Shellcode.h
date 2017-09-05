@@ -32,7 +32,7 @@ void IATshellcode()
 {
 	_PEB *PEB;
 	__asm {
-		pushad
+		pop edi
 		push edi;
 		push fs : [0x30];
 		pop edi;
@@ -135,7 +135,7 @@ void IATshellcode()
 	}
 
 	__asm {
-		popad
+		
 		jmp oep;
 	}
 }

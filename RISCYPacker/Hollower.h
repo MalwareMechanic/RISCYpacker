@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "PEData.h"
+#include "StringCryptor.h"
 
 #define SECTION_BASE_PLACEHOLDER 0xdeadbeef
 #define IAT_LOCATION_PLACEHOLDER 0xbeefdead
@@ -11,6 +12,8 @@
 #define LOADLIBRARY_PLACEHOLDER 0xc0dedead
 #define GETPROCADDRESS_PLACEHOLDER 0xc0deface
 #define OEP_PLACEHOLDER 0xc0defade
+#define PUSH 0x68
+#define PUSH_PLACEHOLDER 0xfec0de00
 
 #define NT_SUCCESS(Status) ((NTSTATUS)(Status) >= 0)
 typedef LONG NTSTATUS;

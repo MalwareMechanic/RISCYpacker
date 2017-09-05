@@ -3,6 +3,7 @@
 #include <map>
 #define RET_INT3_INT3_INT3 0xCCCCCCC3
 
+
 size_t GetFunctionSize(void* function)
 {
 	size_t size=0;

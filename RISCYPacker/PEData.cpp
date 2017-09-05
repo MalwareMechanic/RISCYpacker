@@ -2,9 +2,10 @@
 #include "PEData.h"
 #include <algorithm>
 
-
 PEData::PEData(IMAGE_DOS_HEADER *exe)
 {
+
+
 	Init(exe);
 }
 
@@ -78,7 +79,7 @@ void PEData::ExtractImports()
 	this->iat.offset = this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IAT].VirtualAddress;
 	int importSize = (this->I_optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)/sizeof(IMAGE_IMPORT_DESCRIPTOR);
 	//build in order import (needed for IAT)
-	for(int i =0;i<importSize-1;i++)
+	while(imports->Name!=NULL)
 	{
 		thunkList.push_back(imports);
 		imports++;
